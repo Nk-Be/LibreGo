@@ -30,8 +30,8 @@ android {
         minSdkVersion 27
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 32
-        versionCode 1123
-        versionName '1.12.3' // https://semver.org/lang/zh-CN/
+        versionCode 2000
+        versionName '2.0.0' // https://semver.org/lang/zh-CN/
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += ['zh', 'zh-rCN', 'en', 'en-rUS']
         ndk {
@@ -101,9 +101,9 @@ android {
             if (outputFile != null && outputFile.name.endsWith('.apk')) {
                 def fileName
                 if (variant.buildType.name == 'release') {
-                    fileName = "Go_${defaultConfig.versionName}_arm64-v8a_release.apk"
+                    fileName = "LibreGo_${defaultConfig.versionName}_arm64-v8a_release.apk"
                 } else {
-                    fileName = "Go_${defaultConfig.versionName}_arm64-v8a_debug.apk"
+                    fileName = "LibreGo_${defaultConfig.versionName}_arm64-v8a_debug.apk"
                 }
                 outputFileName=fileName
             }
