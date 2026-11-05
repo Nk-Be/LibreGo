@@ -1,7 +1,6 @@
 plugins {
     id "com.android.application"
     id "org.jetbrains.kotlin.android"
-    // 璋锋瓕瀹樻柟鎺ㄨ崘鐨勭敤浜庨殣钘忓湴鍥?KEY 鐨勬彃浠?https://developers.google.com/maps/documentation/places/android-sdk/secrets-gradle-plugin?hl=zh-cn
     id "com.google.android.libraries.mapsplatform.secrets-gradle-plugin"
 }
 
@@ -29,14 +28,12 @@ android {
     defaultConfig {
         applicationId "com.zcshou.gogogo"
         minSdkVersion 27
-        //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 37
         versionCode 2000
-        versionName '2.0.0' // https://semver.org/lang/zh-CN/
+        versionName '2.0.0'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += ['zh', 'zh-rCN', 'en', 'en-rUS']
         ndk {
-            //noinspection ChromeOsAbiSupport
             abiFilters "arm64-v8a"
         }
         signingConfig = signingConfigs.release
@@ -44,19 +41,9 @@ android {
 
     buildTypes {
         release {
-            // Enables code shrinking, obfuscation, and optimization for only
-            // your project's release build type.
             minifyEnabled = true
-
-            // Enables resource shrinking, which is performed by the
-            // Android Gradle plugin.
             shrinkResources = true
-
-            // Includes the default ProGuard rules files that are packaged with
-            // the Android Gradle plugin. To learn more, go to the section about
-            // R8 configuration files.
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig = signingConfigs.release
             multiDexEnabled = true
         }
@@ -65,7 +52,6 @@ android {
         }
     }
 
-    // 瑕佸瓨鍙?secret value 蹇呴爤瑕佷娇鐢ㄥ埌涓€鍊?BuildScript 鐨勯鍒ワ紝榛樿浼氫粠 local.properties 涓幏鍙?
     buildFeatures {
         buildConfig = true
     }
@@ -80,10 +66,21 @@ android {
 
     packagingOptions {
         jniLibs {
-            excludes += ['lib/armeabi/**']
+            useLegacyPackaging = true
+            excludes += [
+                'lib/armeabi/**',
+                '**/libindoor.so',
+                '**/libtiny_magic.so'
+            ]
         }
         resources {
-            excludes += ['lib/armeabi/**']
+            excludes += [
+                'lib/armeabi/**',
+                'assets/indoor.rs',
+                'assets/indoor.sty',
+                'assets/englishmap.sty',
+                'META-INF/*.version'
+            ]
         }
     }
 
@@ -98,7 +95,6 @@ android {
         includeInBundle = false
     }
 
-    // 鎸囧畾杈撳嚭鐨勫彲鎵ц绋嬪簭鐨勫悕瀛?
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
             def outputFile = output.outputFile
@@ -109,7 +105,7 @@ android {
                 } else {
                     fileName = "LibreGo_${defaultConfig.versionName}_arm64-v8a_debug.apk"
                 }
-                outputFileName=fileName
+                outputFileName = fileName
             }
         }
     }
@@ -120,7 +116,6 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    // AppCompat 1.5.1 寮€濮嬫樉寮忎緷璧栦簬 Lifecycle 2.5.1 鍜?SavedState 1.2.0
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1'
     implementation 'androidx.appcompat:appcompat:1.5.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
