@@ -54,6 +54,7 @@ import com.baidu.mapapi.map.MapStatus
 import com.baidu.mapapi.map.MapStatusUpdate
 import com.baidu.mapapi.map.MapStatusUpdateFactory
 import com.baidu.mapapi.map.MapView
+import com.baidu.mapapi.map.Marker
 import com.baidu.mapapi.map.MarkerOptions
 import com.baidu.mapapi.map.MyLocationConfiguration
 import com.baidu.mapapi.map.MyLocationData
@@ -90,6 +91,7 @@ import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Locale
 
 /**
  * Modern MainActivity in Kotlin for LibreGo (自由影梭).
@@ -163,6 +165,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
     private var mCurrentCity = ""
     private var isFirstLoc = true
     private var isMockServStart = false
+    private var mMockMarker: Marker? = null
 
     private var mServiceBinder: ServiceGo.ServiceGoBinder? = null
     private val mConnection = object : ServiceConnection {
@@ -225,6 +228,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         mMapView?.onResume()
+        mMarkLatLngMap?.let { updatePinText(it) }
         mSensorManager?.let { sm ->
             mSensorAccelerometer?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
             mSensorMagnetic?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
@@ -290,12 +294,29 @@ class MainActivity : BaseActivity(), SensorEventListener {
                     )
                     btnStartMock.text = getString(R.string.action_stop)
                     btnStartMock.setIconResource(R.drawable.ic_close)
+
+                    // Real-time map marker movement
+                    val bd = MapUtils.wgs2bd09(state.longitude, state.latitude)
+                    val mockPos = LatLng(bd[1], bd[0])
+                    val map = mBaiduMap
+                    if (map != null) {
+                        if (mMockMarker == null) {
+                            val markerOptions = MarkerOptions().position(mockPos).icon(mMapIndicator).zIndex(9)
+                            mMockMarker = map.addOverlay(markerOptions) as? Marker
+                        } else {
+                            mMockMarker?.position = mockPos
+                        }
+                    }
                 } else {
+                    mMockMarker?.remove()
+                    mMockMarker = null
+
                     tvStatusBadge.text = getString(R.string.status_idle)
                     tvStatusBadge.setTextColor(Color.parseColor("#455A64")) // Slate Gray
                     val mark = mMarkLatLngMap
                     if (mark != null) {
-                        tvCoordinates.text = String.format("已選目標：%.6f, %.6f (點擊開始模擬)", mark.longitude, mark.latitude)
+                        val nameStr = if (!mMarkName.isNullOrEmpty()) "已選：$mMarkName" else String.format("已選目標：%.6f, %.6f", mark.longitude, mark.latitude)
+                        tvCoordinates.text = "$nameStr (點擊開始模擬)"
                     } else {
                         tvCoordinates.text = "點擊地圖選擇目標位置"
                     }
@@ -314,6 +335,11 @@ class MainActivity : BaseActivity(), SensorEventListener {
 
         if (!GoUtils.isGpsOpened(this)) {
             GoUtils.showEnableGpsDialog(this)
+            return
+        }
+
+        if (!GoUtils.isAllowMockLocation(this)) {
+            GoUtils.showEnableMockLocationDialog(this)
             return
         }
 
@@ -446,13 +472,16 @@ class MainActivity : BaseActivity(), SensorEventListener {
                 override fun onMapClick(point: LatLng?) {
                     point?.let {
                         mMarkLatLngMap = it
+                        mMarkName = null
                         markMap()
                         updatePinText(it)
+                        mGeoCoder?.reverseGeoCode(ReverseGeoCodeOption().location(it))
                     }
                 }
                 override fun onMapPoiClick(poi: MapPoi?) {
                     poi?.position?.let {
                         mMarkLatLngMap = it
+                        mMarkName = poi.name
                         markMap()
                         updatePinText(it)
                     }
@@ -477,7 +506,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
                 override fun onGetReverseGeoCodeResult(result: ReverseGeoCodeResult?) {
                     if (result != null && result.error == SearchResult.ERRORNO.NO_ERROR) {
                         mMarkName = result.address
-                        tvCoordinates.text = "已選位置: ${result.address}"
+                        mMarkLatLngMap?.let { updatePinText(it) }
                     }
                 }
             })
@@ -492,7 +521,8 @@ class MainActivity : BaseActivity(), SensorEventListener {
 
     private fun updatePinText(latLng: LatLng) {
         if (!isMockServStart) {
-            tvCoordinates.text = String.format("已選目標：%.6f, %.6f (點擊開始模擬)", latLng.longitude, latLng.latitude)
+            val nameStr = if (!mMarkName.isNullOrEmpty()) "已選：$mMarkName" else String.format("已選目標：%.6f, %.6f", latLng.longitude, latLng.latitude)
+            tvCoordinates.text = "$nameStr (點擊開始模擬)"
         }
     }
 
@@ -621,10 +651,10 @@ class MainActivity : BaseActivity(), SensorEventListener {
             mMarkLatLngMap = if (rbBD.isChecked) {
                 LatLng(lat, lng)
             } else {
-                val bd = MapUtils.wgs2bd09(lat, lng)
+                val bd = MapUtils.wgs2bd09(lng, lat)
                 LatLng(bd[1], bd[0])
             }
-            mMarkName = "手動輸入座標"
+            mMarkName = String.format(Locale.getDefault(), "自定義坐標 (%.4f, %.4f)", lng, lat)
             markMap()
             mMarkLatLngMap?.let {
                 mBaiduMap?.setMapStatus(MapStatusUpdateFactory.newLatLng(it))
@@ -727,12 +757,17 @@ class MainActivity : BaseActivity(), SensorEventListener {
         return super.onCreateOptionsMenu(menu)
     }
 
-    private fun recordCurrentLocation(lng: Double, lat: Double) {
+    private fun recordCurrentLocation(lng: Double, lat: Double, customName: String? = null) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val latLngWgs = MapUtils.bd2wgs(lng, lat)
+                val locationName = when {
+                    !customName.isNullOrBlank() -> customName
+                    !mMarkName.isNullOrBlank() -> mMarkName!!
+                    else -> String.format(Locale.getDefault(), "目標坐標 (%.4f, %.4f)", lng, lat)
+                }
                 val values = ContentValues().apply {
-                    put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, mMarkName ?: "模擬定位點")
+                    put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, locationName)
                     put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_WGS84, latLngWgs[0].toString())
                     put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_WGS84, latLngWgs[1].toString())
                     put(DataBaseHistoryLocation.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000)
@@ -742,6 +777,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
                 mLocationHistoryDB?.let { db ->
                     DataBaseHistoryLocation.saveHistoryLocation(db, values)
                 }
+                XLog.i("Saved location history: $locationName at ($lng, $lat)")
             } catch (e: Exception) {
                 XLog.e("ERROR: recordCurrentLocation", e)
             }

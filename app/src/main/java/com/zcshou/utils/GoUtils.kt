@@ -83,6 +83,9 @@ object GoUtils {
     @SuppressLint("WrongConstant")
     @JvmStatic
     fun isAllowMockLocation(context: Context): Boolean {
+        if (com.zcshou.service.MockLocationEngine.locationState.value.isMocking) {
+            return true
+        }
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
         return try {
             val providers = lm.allProviders
@@ -160,15 +163,17 @@ object GoUtils {
     @JvmStatic
     fun showEnableMockLocationDialog(context: Context) {
         AlertDialog.Builder(context)
-            .setTitle("啟用位置模擬")
-            .setMessage("請在「開發者選項 → 選取模擬位置資訊應用程式」中選擇 LibreGo")
-            .setPositiveButton("前往設定") { _, _ ->
+            .setTitle("未設定模擬位置資訊應用程式")
+            .setMessage("系統檢測到 LibreGo 尚未被設為模擬位置應用程式。\n\n請按照以下步驟開啟：\n1. 進入系統「開發者選項」\n2. 找到「選取模擬位置資訊應用程式」\n3. 點選並選擇「LibreGo」")
+            .setPositiveButton("前往開發者選項") { _, _ ->
                 try {
                     val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                    DisplayToast(context, "無法自動跳轉，請手動打開設定中的「開發者選項」")
+                }
             }
             .setNegativeButton("取消", null)
             .show()

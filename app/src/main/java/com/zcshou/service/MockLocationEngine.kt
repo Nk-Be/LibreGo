@@ -64,9 +64,15 @@ object MockLocationEngine {
     private val random = Random()
 
     @Synchronized
-    fun start(context: Context, lat: Double, lng: Double, alt: Double) {
+    fun start(context: Context, lat: Double, lng: Double, alt: Double): Boolean {
         val appCtx = context.applicationContext
         locationManager = appCtx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+
+        if (!registerTestProviders()) {
+            _locationState.value = LocationState(isMocking = false)
+            XLog.e("MockLocationEngine: failed to register test providers (Mock permission missing)")
+            return false
+        }
 
         _locationState.value = LocationState(
             latitude = lat,
@@ -77,8 +83,6 @@ object MockLocationEngine {
             isMocking = true
         )
 
-        registerTestProviders()
-
         mockJob?.cancel()
         mockJob = scope.launch {
             while (isActive && _locationState.value.isMocking) {
@@ -88,6 +92,7 @@ object MockLocationEngine {
             }
         }
         XLog.i("MockLocationEngine started at ($lat, $lng, $alt)")
+        return true
     }
 
     @Synchronized
@@ -139,8 +144,8 @@ object MockLocationEngine {
     }
 
     @SuppressLint("WrongConstant")
-    private fun registerTestProviders() {
-        val mgr = locationManager ?: return
+    private fun registerTestProviders(): Boolean {
+        val mgr = locationManager ?: return false
 
         // Network
         try {
@@ -162,6 +167,9 @@ object MockLocationEngine {
             if (!mgr.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 mgr.setTestProviderEnabled(LocationManager.NETWORK_PROVIDER, true)
             }
+        } catch (e: SecurityException) {
+            XLog.e("MockLocationEngine: Missing mock location permission", e)
+            return false
         } catch (e: Exception) {
             XLog.e("MockLocationEngine: add NETWORK_PROVIDER failed", e)
         }
@@ -186,6 +194,9 @@ object MockLocationEngine {
             if (!mgr.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 mgr.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
             }
+        } catch (e: SecurityException) {
+            XLog.e("MockLocationEngine: Missing mock location permission", e)
+            return false
         } catch (e: Exception) {
             XLog.e("MockLocationEngine: add GPS_PROVIDER failed", e)
         }
@@ -210,9 +221,14 @@ object MockLocationEngine {
             if (!mgr.isProviderEnabled(FUSED_PROVIDER)) {
                 mgr.setTestProviderEnabled(FUSED_PROVIDER, true)
             }
+        } catch (e: SecurityException) {
+            XLog.e("MockLocationEngine: Missing mock location permission", e)
+            return false
         } catch (e: Exception) {
             XLog.e("MockLocationEngine: add FUSED_PROVIDER failed", e)
         }
+
+        return true
     }
 
     private fun unregisterTestProviders() {

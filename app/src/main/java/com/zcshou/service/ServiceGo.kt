@@ -64,7 +64,12 @@ class ServiceGo : Service() {
             val lat = intent.getDoubleExtra(MainActivity.LAT_MSG_ID, DEFAULT_LAT)
             val lng = intent.getDoubleExtra(MainActivity.LNG_MSG_ID, DEFAULT_LNG)
             val alt = intent.getDoubleExtra(MainActivity.ALT_MSG_ID, DEFAULT_ALT)
-            MockLocationEngine.start(this, lat, lng, alt)
+            val started = MockLocationEngine.start(this, lat, lng, alt)
+            if (!started) {
+                XLog.w("ServiceGo: MockLocationEngine start failed (Mock permission missing), terminating service.")
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
         return START_STICKY
     }
