@@ -29,8 +29,8 @@ android {
         applicationId "com.zcshou.gogogo"
         minSdkVersion 27
         targetSdkVersion 37
-        versionCode 2000
-        versionName '2.0.0'
+        versionCode 2520
+        versionName '2.5.2'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += ['zh', 'zh-rCN', 'en', 'en-rUS']
         ndk {
