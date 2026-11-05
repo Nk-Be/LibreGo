@@ -6,8 +6,8 @@ plugins {
 
 android {
     ndkVersion = '26.2.11394342'
-    compileSdk = 32
-    buildToolsVersion = '36.0.0'
+    compileSdk = 37
+    buildToolsVersion = '37.0.0'
     namespace = 'com.zcshou.gogogo'
 
     signingConfigs {
@@ -29,7 +29,7 @@ android {
         applicationId "com.zcshou.gogogo"
         minSdkVersion 27
         //noinspection ExpiredTargetSdkVersion
-        targetSdkVersion 32
+        targetSdkVersion 37
         versionCode 2000
         versionName '2.0.0' // https://semver.org/lang/zh-CN/
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
