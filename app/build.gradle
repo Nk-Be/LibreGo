@@ -17,16 +17,16 @@ android {
     signingConfigs {
         debug {
             storeFile targetKeyFile
-            storePassword 'XiaoTong666'
+            storePassword '1919810'
             keyAlias 'librego'
-            keyPassword 'XiaoTong666'
+            keyPassword '1919810'
             storeType 'PKCS12'
         }
         release {
             storeFile targetKeyFile
-            storePassword 'XiaoTong666'
+            storePassword '1919810'
             keyAlias 'librego'
-            keyPassword 'XiaoTong666'
+            keyPassword '1919810'
             storeType 'PKCS12'
         }
     }
@@ -105,6 +105,10 @@ android {
             }
         }
     }
+}
+
+secrets {
+    defaultPropertiesFileName = 'secrets.defaults.properties'
 }
 
 dependencies {

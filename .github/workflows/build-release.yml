@@ -29,9 +29,13 @@ jobs:
 
       - name: Create local.properties
         run: |
+          MAPS_KEY="${{ secrets.MAPS_API_KEY }}"
+          if [ -z "$MAPS_KEY" ]; then MAPS_KEY="fb7YwlKY3ntx8hBDGMGLqX2FhlPkDMvv"; fi
+          MAPS_CODE="${{ secrets.MAPS_SAFE_CODE }}"
+          if [ -z "$MAPS_CODE" ]; then MAPS_CODE="C7:39:86:A1:EA:2E:AD:D4:B3:CF:63:CA:A4:2B:C6:AC:2B:59:E2:B7;top.nkbe.libre"; fi
           cat << EOF > local.properties
-          MAPS_API_KEY=${{ secrets.MAPS_API_KEY }}
-          MAPS_SAFE_CODE=${{ secrets.MAPS_SAFE_CODE }}
+          MAPS_API_KEY=$MAPS_KEY
+          MAPS_SAFE_CODE=$MAPS_CODE
           EOF
 
       - name: Build APK
