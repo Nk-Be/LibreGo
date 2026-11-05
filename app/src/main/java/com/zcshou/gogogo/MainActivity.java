@@ -785,6 +785,15 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     private void initGoBtn() {
         mButtonStart = findViewById(R.id.faBtnStart);
         mButtonStart.setOnClickListener(this::doGoLocation);
+
+        com.google.android.material.floatingactionbutton.FloatingActionButton faBtnJoystick = findViewById(R.id.faBtnJoystick);
+        faBtnJoystick.setOnClickListener(v -> {
+            if (!android.provider.Settings.canDrawOverlays(this)) {
+                GoUtils.showEnableFloatWindowDialog(this);
+            } else {
+                com.zcshou.joystick.FloatingJoystickManager.INSTANCE.toggle(this);
+            }
+        });
     }
 
     private void startGoLocation() {
@@ -820,11 +829,6 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
             return;
         }
 
-        if (!Settings.canDrawOverlays(getApplicationContext())) {//悬浮窗权限判断
-            GoUtils.showEnableFloatWindowDialog(this);
-            XLog.e("无悬浮窗权限!");
-            return;
-        }
 
         if (isMockServStart) {
             if (mMarkLatLngMap == null) {

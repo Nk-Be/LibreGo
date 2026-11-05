@@ -1,6 +1,7 @@
 plugins {
     id "com.android.application"
-    // 谷歌官方推荐的用于隐藏地图 KEY 的插件 https://developers.google.com/maps/documentation/places/android-sdk/secrets-gradle-plugin?hl=zh-cn
+    id "org.jetbrains.kotlin.android"
+    // 璋锋瓕瀹樻柟鎺ㄨ崘鐨勭敤浜庨殣钘忓湴鍥?KEY 鐨勬彃浠?https://developers.google.com/maps/documentation/places/android-sdk/secrets-gradle-plugin?hl=zh-cn
     id "com.google.android.libraries.mapsplatform.secrets-gradle-plugin"
 }
 
@@ -64,14 +65,17 @@ android {
         }
     }
 
-    // 要存取 secret value 必須要使用到一個 BuildScript 的類別，默认会从 local.properties 中获取
+    // 瑕佸瓨鍙?secret value 蹇呴爤瑕佷娇鐢ㄥ埌涓€鍊?BuildScript 鐨勯鍒ワ紝榛樿浼氫粠 local.properties 涓幏鍙?
     buildFeatures {
         buildConfig = true
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        jvmTarget = '21'
     }
 
     packagingOptions {
@@ -94,7 +98,7 @@ android {
         includeInBundle = false
     }
 
-    // 指定输出的可执行程序的名字
+    // 鎸囧畾杈撳嚭鐨勫彲鎵ц绋嬪簭鐨勫悕瀛?
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
             def outputFile = output.outputFile
@@ -112,8 +116,11 @@ android {
 }
 
 dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
-    // AppCompat 1.5.1 开始显式依赖于 Lifecycle 2.5.1 和 SavedState 1.2.0
+    // AppCompat 1.5.1 寮€濮嬫樉寮忎緷璧栦簬 Lifecycle 2.5.1 鍜?SavedState 1.2.0
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1'
     implementation 'androidx.appcompat:appcompat:1.5.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'

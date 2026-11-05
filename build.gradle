@@ -8,7 +8,8 @@ buildscript {
 
     dependencies {
         classpath 'com.android.tools.build:gradle:8.12.1'
-        // 谷歌官方推荐的用于隐藏地图 KEY 的插件 https://developers.google.com/maps/documentation/places/android-sdk/secrets-gradle-plugin?hl=zh-cn
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'
+        // 璋锋瓕瀹樻柟鎺ㄨ崘鐨勭敤浜庨殣钘忓湴鍥?KEY 鐨勬彃浠?https://developers.google.com/maps/documentation/places/android-sdk/secrets-gradle-plugin?hl=zh-cn
         classpath("com.google.android.libraries.mapsplatform.secrets-gradle-plugin:secrets-gradle-plugin:2.0.1")
 
         // NOTE: Do not place your application dependencies here; they belong
@@ -24,7 +25,7 @@ allprojects {
 
     gradle.projectsEvaluated {
         tasks.withType(JavaCompile).tap {
-            configureEach { // 用于显示过时 API 的详细信息
+            configureEach { // 鐢ㄤ簬鏄剧ず杩囨椂 API 鐨勮缁嗕俊鎭?
                 options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
             }
         }
