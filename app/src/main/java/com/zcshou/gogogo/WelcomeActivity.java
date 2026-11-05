@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Build;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.TextPaint;
@@ -80,11 +81,11 @@ public class WelcomeActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == SDK_PERMISSION_REQUEST) {
-            for (int i = 0; i < ReqPermissions.size(); i++) {
-                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
-                    GoUtils.DisplayToast(this, getResources().getString(R.string.app_error_permission));
-                    return;
-                }
+            boolean hasFineLocation = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            boolean hasCoarseLocation = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            if (!hasFineLocation && !hasCoarseLocation) {
+                GoUtils.DisplayToast(this, getResources().getString(R.string.app_error_permission));
+                return;
             }
             isPermission = true;
         }
@@ -92,7 +93,7 @@ public class WelcomeActivity extends AppCompatActivity {
     }
 
     private void checkDefaultPermissions() {
-        // 定位精确位置
+        ReqPermissions.clear();
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ReqPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
@@ -101,17 +102,14 @@ public class WelcomeActivity extends AppCompatActivity {
             ReqPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         }
 
-        /*
-         * 读写权限和电话状态权限非必要权限(建议授予)只会申请一次，用户同意或者禁止，只会弹一次
-         */
-        // 读写权限
-        if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ReqPermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-        }
-
-        // 读取电话状态权限
-        if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            ReqPermissions.add(Manifest.permission.READ_PHONE_STATE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ReqPermissions.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        } else {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                ReqPermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
         }
 
         if (ReqPermissions.isEmpty()) {
