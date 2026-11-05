@@ -90,6 +90,12 @@
         app:title="@string/setting_group_about"
         app:iconSpaceReserved="false">
 
+                <Preference
+            app:key="setting_github"
+            app:title="GitHub 開源倉庫"
+            app:summary="https://github.com/Nk-Be/LibreGo"
+            app:icon="@drawable/ic_github"
+            app:iconSpaceReserved="false"/>
         <Preference
             app:key="setting_version"
             app:title="@string/setting_version"
