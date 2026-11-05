@@ -78,6 +78,16 @@
     <string name="joystick_walk">步行</string>
     <string name="joystick_run">跑步</string>
     <string name="joystick_bike">自行车</string>
+    <string name="nav_menu_github">GitHub 官方倉庫 (求 Star)</string>
+    <string name="nav_menu_about">關於 LibreGo</string>
+    <string name="github_url">https://github.com/Nk-Be/LibreGo</string>
+    <string name="status_mocking">🟢 模擬定位中</string>
+    <string name="status_idle">⚪ 尚未開始模擬</string>
+    <string name="action_start">開始定位</string>
+    <string name="action_stop">停止模擬</string>
+    <string name="action_joystick">懸浮搖桿</string>
+    <string name="about_dialog_title">關於 LibreGo (自由影梭)</string>
+    <string name="about_dialog_message">LibreGo 是一款純淨、現代且 100% 自由開源的 Android 模擬定位工具。\n\n• 堅守開源自由：無收費、無會員驗證、無廣告。\n• 遵循 GNU General Public License v3.0 開源協議。\n• 採用 Kotlin 與現代 Java 21 全面現代化重構。\n\n歡迎在 GitHub 關注專案進展、反饋建議或點亮 Star 支持開源！</string>
     <!-- 导航页 -->
     <string name="nav_drawer_open">打开导航菜单</string>
     <string name="nav_drawer_close">关闭导航菜单</string>

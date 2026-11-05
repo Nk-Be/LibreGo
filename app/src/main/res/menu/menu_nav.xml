@@ -5,6 +5,10 @@
 
     <group>
         <item
+            android:id="@+id/nav_github"
+            android:icon="@drawable/ic_github"
+            android:title="@string/nav_menu_github" />
+        <item
             android:id="@+id/nav_history"
             android:icon="@drawable/ic_menu_history"
             android:title="@string/nav_menu_history" />
@@ -28,17 +32,9 @@
     <item android:title="@string/nav_menu_more">
         <menu>
             <item
-                android:id="@+id/nav_update"
-                android:icon="@drawable/ic_menu_upgrade"
-                android:title="@string/nav_menu_upgrade" />
-            <item
-                android:id="@+id/nav_feedback"
-                android:icon="@drawable/ic_menu_feedback"
-                android:title="@string/nav_menu_feedback" />
-            <item
-                android:id="@+id/nav_contact"
-                android:icon="@drawable/ic_contact"
-                android:title="@string/nav_menu_contact" />
+                android:id="@+id/nav_about"
+                android:icon="@drawable/ic_msg"
+                android:title="@string/nav_menu_about" />
         </menu>
     </item>
 
