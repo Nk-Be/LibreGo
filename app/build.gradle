@@ -4,6 +4,10 @@ plugins {
     id "com.google.android.libraries.mapsplatform.secrets-gradle-plugin"
 }
 
+def akeysFile = file('D:/NkBe/Akeys/LibreGo-key.p12')
+def localKeyFile = file('../keystore/LibreGo-key.p12')
+def targetKeyFile = akeysFile.exists() ? akeysFile : localKeyFile
+
 android {
     ndkVersion = '26.2.11394342'
     compileSdk = 37
@@ -12,21 +16,23 @@ android {
 
     signingConfigs {
         debug {
-            storeFile file('..\\keystore\\GoGoGo.jks')
-            storePassword 'GoGoGo'
-            keyAlias 'GoGoKey'
-            keyPassword 'GoGoGo'
+            storeFile targetKeyFile
+            storePassword 'XiaoTong666'
+            keyAlias 'librego'
+            keyPassword 'XiaoTong666'
+            storeType 'PKCS12'
         }
         release {
-            storeFile file('..\\keystore\\GoGoGo.jks')
-            storePassword 'GoGoGo'
-            keyAlias 'GoGoKey'
-            keyPassword 'GoGoGo'
+            storeFile targetKeyFile
+            storePassword 'XiaoTong666'
+            keyAlias 'librego'
+            keyPassword 'XiaoTong666'
+            storeType 'PKCS12'
         }
     }
 
     defaultConfig {
-        applicationId "com.zcshou.gogogo"
+        applicationId "top.nkbe.libre"
         minSdkVersion 27
         targetSdkVersion 37
         versionCode 2000
@@ -42,8 +48,8 @@ android {
     buildTypes {
         release {
             minifyEnabled = true
-            shrinkResources = true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            shrinkResources = false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig = signingConfigs.release
             multiDexEnabled = true
         }
@@ -67,20 +73,10 @@ android {
     packagingOptions {
         jniLibs {
             useLegacyPackaging = true
-            excludes += [
-                'lib/armeabi/**',
-                '**/libindoor.so',
-                '**/libtiny_magic.so'
-            ]
+            excludes += ['lib/armeabi/**']
         }
         resources {
-            excludes += [
-                'lib/armeabi/**',
-                'assets/indoor.rs',
-                'assets/indoor.sty',
-                'assets/englishmap.sty',
-                'META-INF/*.version'
-            ]
+            excludes += ['lib/armeabi/**', 'META-INF/*.version']
         }
     }
 

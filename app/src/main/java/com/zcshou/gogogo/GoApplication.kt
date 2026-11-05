@@ -28,15 +28,25 @@ class GoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        initXlog()
+        try {
+            initXlog()
+        } catch (_: Exception) {}
 
-        SDKInitializer.setAgreePrivacy(this, true)
-        LocationClient.setAgreePrivacy(true)
-        SDKInitializer.setApiKey(BuildConfig.MAPS_API_KEY)
-        SDKInitializer.initialize(this)
-        SDKInitializer.setCoordType(CoordType.BD09LL)
+        try {
+            SDKInitializer.setAgreePrivacy(this, true)
+            LocationClient.setAgreePrivacy(true)
+            SDKInitializer.setApiKey(BuildConfig.MAPS_API_KEY)
+            SDKInitializer.initialize(this)
+            SDKInitializer.setCoordType(CoordType.BD09LL)
+        } catch (e: Throwable) {
+            XLog.e("GoApplication: Baidu SDKInitializer error", e)
+        }
 
-        com.zcshou.shizuku.ShizukuManager.init(this)
+        try {
+            com.zcshou.shizuku.ShizukuManager.init(this)
+        } catch (e: Throwable) {
+            XLog.e("GoApplication: ShizukuManager init error", e)
+        }
     }
 
     private fun initXlog() {

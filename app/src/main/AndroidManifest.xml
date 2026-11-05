@@ -50,7 +50,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
-        android:name=".GoApplication"
+        android:name="com.zcshou.gogogo.GoApplication"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:launchMode="singleInstance"
@@ -94,7 +94,7 @@
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <activity
-            android:name=".WelcomeActivity"
+            android:name="com.zcshou.gogogo.WelcomeActivity"
             android:exported="true"
             android:theme="@style/AppTheme.NoActionBar"
             >
@@ -105,18 +105,18 @@
         </activity>
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.zcshou.gogogo.MainActivity"
             android:launchMode="singleInstance"
             android:exported="false"
             android:theme="@style/AppTheme.NoActionBar" />
 
         <activity
-            android:name=".SettingsActivity"
+            android:name="com.zcshou.gogogo.SettingsActivity"
             android:label="@string/app_settings"
             android:exported="false" />
 
         <activity
-            android:name=".HistoryActivity"
+            android:name="com.zcshou.gogogo.HistoryActivity"
             android:label="@string/app_history"
             android:exported="false" />
 
