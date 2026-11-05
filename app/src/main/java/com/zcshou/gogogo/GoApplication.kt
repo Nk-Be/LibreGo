@@ -35,6 +35,8 @@ class GoApplication : Application() {
         SDKInitializer.setApiKey(BuildConfig.MAPS_API_KEY)
         SDKInitializer.initialize(this)
         SDKInitializer.setCoordType(CoordType.BD09LL)
+
+        com.zcshou.shizuku.ShizukuManager.init(this)
     }
 
     private fun initXlog() {

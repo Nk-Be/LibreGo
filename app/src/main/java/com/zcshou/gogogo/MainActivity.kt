@@ -77,6 +77,7 @@ import com.zcshou.database.DataBaseHistorySearch
 import com.zcshou.joystick.FloatingJoystickManager
 import com.zcshou.service.MockLocationEngine
 import com.zcshou.service.ServiceGo
+import com.zcshou.shizuku.ShizukuManager
 import com.zcshou.utils.GoUtils
 import com.zcshou.utils.MapUtils
 import com.zcshou.utils.ShareUtils
@@ -190,6 +191,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
 
     // Bottom Card Views (Shizuku style)
     private lateinit var tvStatusBadge: TextView
+    private lateinit var tvShizukuBadge: TextView
     private lateinit var tvCoordinates: TextView
     private lateinit var tvOpenGithub: TextView
     private lateinit var btnStartMock: MaterialButton
@@ -220,6 +222,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
         initMapButton()
         initStoreHistory()
         initSearchView()
+        initShizukuView()
 
         observeMockEngine()
         XLog.i("MainActivity onCreate (Kotlin)")
@@ -229,6 +232,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
         super.onResume()
         mMapView?.onResume()
         mMarkLatLngMap?.let { updatePinText(it) }
+        ShizukuManager.updateState(this)
         mSensorManager?.let { sm ->
             mSensorAccelerometer?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
             mSensorMagnetic?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
@@ -259,6 +263,7 @@ class MainActivity : BaseActivity(), SensorEventListener {
     // ==========================================
     private fun initCardViews() {
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
+        tvShizukuBadge = findViewById(R.id.tvShizukuBadge)
         tvCoordinates = findViewById(R.id.tvCoordinates)
         tvOpenGithub = findViewById(R.id.tvOpenGithub)
         btnStartMock = findViewById(R.id.btnStartMock)
@@ -274,9 +279,87 @@ class MainActivity : BaseActivity(), SensorEventListener {
 
         btnToggleJoystick.setOnClickListener {
             if (!Settings.canDrawOverlays(this)) {
-                GoUtils.showEnableFloatWindowDialog(this)
+                GoUtils.showEnableFloatWindowDialog(this) {
+                    FloatingJoystickManager.toggle(this)
+                }
             } else {
                 FloatingJoystickManager.toggle(this)
+            }
+        }
+    }
+
+    private fun initShizukuView() {
+        lifecycleScope.launch {
+            ShizukuManager.state.collectLatest { s ->
+                when {
+                    !s.isInstalled -> {
+                        tvShizukuBadge.text = "⚡ Shizuku 未安裝"
+                        tvShizukuBadge.setTextColor(Color.parseColor("#78909C"))
+                    }
+                    !s.isBinderAlive -> {
+                        tvShizukuBadge.text = "⚡ Shizuku 未運行"
+                        tvShizukuBadge.setTextColor(Color.parseColor("#D32F2F"))
+                    }
+                    !s.hasPermission -> {
+                        tvShizukuBadge.text = "⚡ Shizuku 待授權"
+                        tvShizukuBadge.setTextColor(Color.parseColor("#F57C00"))
+                    }
+                    else -> {
+                        tvShizukuBadge.text = "⚡ Shizuku 特權已連接"
+                        tvShizukuBadge.setTextColor(Color.parseColor("#00796B"))
+                    }
+                }
+            }
+        }
+
+        tvShizukuBadge.setOnClickListener {
+            val s = ShizukuManager.state.value
+            when {
+                !s.isInstalled -> {
+                    AlertDialog.Builder(this)
+                        .setTitle("Shizuku 未安裝")
+                        .setMessage("Shizuku 可讓 LibreGo 免 Root 一鍵配置模擬位置、螢幕懸浮窗與後台防殺白名單。\n\n是否前往 Shizuku 官方網站了解或下載？")
+                        .setPositiveButton("前往下載") { _, _ ->
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")))
+                            } catch (_: Exception) {}
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+                !s.isBinderAlive -> {
+                    AlertDialog.Builder(this)
+                        .setTitle("Shizuku 服務未運行")
+                        .setMessage("檢測到已安裝 Shizuku，但 Shizuku 服務目前尚未啟動。\n\n請打開 Shizuku 應用程式，使用「無線除錯」或「連接電腦 (adb)」啟動服務。")
+                        .setPositiveButton("打開 Shizuku") { _, _ ->
+                            try {
+                                val intent = packageManager.getLaunchIntentForPackage(ShizukuManager.SHIZUKU_PACKAGE)
+                                if (intent != null) startActivity(intent)
+                            } catch (_: Exception) {}
+                        }
+                        .setNegativeButton("關閉", null)
+                        .show()
+                }
+                !s.hasPermission -> {
+                    ShizukuManager.requestPermission(this)
+                }
+                else -> {
+                    AlertDialog.Builder(this)
+                        .setTitle("⚡ Shizuku 特權中心")
+                        .setMessage("Shizuku 特權服務正常運行中 (v${s.version})！\n\n可一鍵自動配置所有模擬權限：\n• 模擬位置 AppOps\n• 懸浮窗顯示權限\n• 通知與後台白名單")
+                        .setPositiveButton("一鍵配置特權") { _, _ ->
+                            lifecycleScope.launch {
+                                val result = ShizukuManager.grantAllPrivileges(this@MainActivity)
+                                if (result.first) {
+                                    GoUtils.DisplayToast(this@MainActivity, "Shizuku 特權已全部配置成功！")
+                                } else {
+                                    GoUtils.DisplayToast(this@MainActivity, "配置異常: ${result.second}")
+                                }
+                            }
+                        }
+                        .setNegativeButton("關閉", null)
+                        .show()
+                }
             }
         }
     }
@@ -339,7 +422,9 @@ class MainActivity : BaseActivity(), SensorEventListener {
         }
 
         if (!GoUtils.isAllowMockLocation(this)) {
-            GoUtils.showEnableMockLocationDialog(this)
+            GoUtils.showEnableMockLocationDialog(this) {
+                handleMockButtonClick(v)
+            }
             return
         }
 

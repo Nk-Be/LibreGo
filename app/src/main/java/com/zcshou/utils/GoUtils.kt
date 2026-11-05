@@ -1,6 +1,7 @@
 package com.zcshou.utils
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -18,6 +19,9 @@ import android.view.Gravity
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import com.elvishew.xlog.XLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -161,42 +165,110 @@ object GoUtils {
     }
 
     @JvmStatic
-    fun showEnableMockLocationDialog(context: Context) {
+    fun showEnableMockLocationDialog(context: Context, onShizukuGranted: (() -> Unit)? = null) {
+        val isShizukuAlive = com.zcshou.shizuku.ShizukuManager.isBinderAlive()
+        val hasShizukuPerm = com.zcshou.shizuku.ShizukuManager.hasPermission()
+
+        if (isShizukuAlive) {
+            val builder = AlertDialog.Builder(context)
+                .setTitle("⚡ Shizuku 免 Root 特權授權")
+            if (hasShizukuPerm) {
+                builder.setMessage("檢測到系統運行 Shizuku 且特權已連接！\n\n點擊「一鍵特權授權」，LibreGo 將自動獲得模擬位置與懸浮窗權限，無需手動進入系統設定。")
+                    .setPositiveButton("一鍵特權授權") { _, _ ->
+                        CoroutineScope(Dispatchers.Main).launch {
+                            val result = com.zcshou.shizuku.ShizukuManager.grantAllPrivileges(context)
+                            if (result.first) {
+                                DisplayToast(context, "Shizuku 特權授權成功！已啟用模擬與懸浮窗")
+                                onShizukuGranted?.invoke()
+                            } else {
+                                DisplayToast(context, "授權失敗: ${result.second}")
+                            }
+                        }
+                    }
+                    .setNeutralButton("手動設定") { _, _ -> openDevSettings(context) }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return
+            } else {
+                builder.setMessage("檢測到系統運行 Shizuku，但 LibreGo 尚未獲得 Shizuku 授權。\n\n點擊「請求授權」，即可一鍵免 Root 配置模擬定位與懸浮窗。")
+                    .setPositiveButton("請求 Shizuku 授權") { _, _ ->
+                        if (context is Activity) {
+                            com.zcshou.shizuku.ShizukuManager.requestPermission(context)
+                        } else {
+                            DisplayToast(context, "請在主介面點擊授權")
+                        }
+                    }
+                    .setNeutralButton("手動設定") { _, _ -> openDevSettings(context) }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return
+            }
+        }
+
         AlertDialog.Builder(context)
             .setTitle("未設定模擬位置資訊應用程式")
-            .setMessage("系統檢測到 LibreGo 尚未被設為模擬位置應用程式。\n\n請按照以下步驟開啟：\n1. 進入系統「開發者選項」\n2. 找到「選取模擬位置資訊應用程式」\n3. 點選並選擇「LibreGo」")
-            .setPositiveButton("前往開發者選項") { _, _ ->
-                try {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    context.startActivity(intent)
-                } catch (_: Exception) {
-                    DisplayToast(context, "無法自動跳轉，請手動打開設定中的「開發者選項」")
-                }
-            }
+            .setMessage("系統檢測到 LibreGo 尚未被設為模擬位置應用程式。\n\n請按照以下步驟開啟：\n1. 進入系統「開發者選項」\n2. 找到「選取模擬位置資訊應用程式」\n3. 點選並選擇「LibreGo」\n\n（提示：安裝並啟動 Shizuku 可免進入開發者選項一鍵授權）")
+            .setPositiveButton("前往開發者選項") { _, _ -> openDevSettings(context) }
             .setNegativeButton("取消", null)
             .show()
     }
 
     @JvmStatic
-    fun showEnableFloatWindowDialog(context: Context) {
+    fun openDevSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            DisplayToast(context, "無法自動跳轉，請手動打開設定中的「開發者選項」")
+        }
+    }
+
+    @JvmStatic
+    fun showEnableFloatWindowDialog(context: Context, onShizukuGranted: (() -> Unit)? = null) {
+        val isShizukuAlive = com.zcshou.shizuku.ShizukuManager.isBinderAlive()
+        val hasShizukuPerm = com.zcshou.shizuku.ShizukuManager.hasPermission()
+
+        if (isShizukuAlive && hasShizukuPerm) {
+            AlertDialog.Builder(context)
+                .setTitle("⚡ 啟用懸浮窗特權")
+                .setMessage("檢測到 Shizuku 特權已連接，可直接一鍵為 LibreGo 啟用螢幕懸浮窗權限！")
+                .setPositiveButton("一鍵啟用") { _, _ ->
+                    CoroutineScope(Dispatchers.Main).launch {
+                        val result = com.zcshou.shizuku.ShizukuManager.execPrivilegedCommand("appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow")
+                        if (result.first) {
+                            DisplayToast(context, "懸浮窗特權授權成功！")
+                            onShizukuGranted?.invoke()
+                        } else {
+                            DisplayToast(context, "授權失敗: ${result.second}")
+                        }
+                    }
+                }
+                .setNeutralButton("手動授權") { _, _ -> openOverlaySettings(context) }
+                .setNegativeButton("暫不使用", null)
+                .show()
+            return
+        }
+
         AlertDialog.Builder(context)
             .setTitle("啟用懸浮窗權限")
             .setMessage("若需要使用螢幕懸浮搖桿即時移動位置，請開啟「在其他應用程式上層顯示」權限")
-            .setPositiveButton("前往授權") { _, _ ->
-                try {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    ).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    context.startActivity(intent)
-                } catch (_: Exception) {}
-            }
+            .setPositiveButton("前往授權") { _, _ -> openOverlaySettings(context) }
             .setNegativeButton("暫不使用", null)
             .show()
+    }
+
+    private fun openOverlaySettings(context: Context) {
+        try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {}
     }
 
     @JvmStatic
