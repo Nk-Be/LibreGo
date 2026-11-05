@@ -35,7 +35,10 @@ class GoApplication : Application() {
         try {
             SDKInitializer.setAgreePrivacy(this, true)
             LocationClient.setAgreePrivacy(true)
-            SDKInitializer.setApiKey(BuildConfig.MAPS_API_KEY)
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+            val customApiKey = prefs.getString("custom_maps_api_key", null)?.trim()
+            val effectiveKey = if (!customApiKey.isNullOrEmpty()) customApiKey else BuildConfig.MAPS_API_KEY
+            SDKInitializer.setApiKey(effectiveKey)
             SDKInitializer.initialize(this)
             SDKInitializer.setCoordType(CoordType.BD09LL)
         } catch (e: Throwable) {

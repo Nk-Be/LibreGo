@@ -116,6 +116,11 @@ object MockLocationEngine {
     }
 
     @Synchronized
+    fun setSpeed(speed: Double) {
+        _locationState.value = _locationState.value.copy(speed = speed)
+    }
+
+    @Synchronized
     fun moveByRocker(speed: Double, disLngKm: Double, disLatKm: Double, bearing: Float) {
         val cur = _locationState.value
         val latRad = Math.toRadians(abs(cur.latitude))

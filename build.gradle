@@ -2,6 +2,8 @@
 
 buildscript {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
     }
@@ -9,23 +11,22 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.12.1'
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'
-        // 璋锋瓕瀹樻柟鎺ㄨ崘鐨勭敤浜庨殣钘忓湴鍥?KEY 鐨勬彃浠?https://developers.google.com/maps/documentation/places/android-sdk/secrets-gradle-plugin?hl=zh-cn
+        classpath 'org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.21'
         classpath("com.google.android.libraries.mapsplatform.secrets-gradle-plugin:secrets-gradle-plugin:2.0.1")
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
     }
 }
 
 allprojects {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
     }
 
     gradle.projectsEvaluated {
         tasks.withType(JavaCompile).tap {
-            configureEach { // 鐢ㄤ簬鏄剧ず杩囨椂 API 鐨勮缁嗕俊鎭?
+            configureEach {
                 options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
             }
         }
