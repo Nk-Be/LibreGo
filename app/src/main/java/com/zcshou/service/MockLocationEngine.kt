@@ -27,11 +27,12 @@ import kotlin.math.cos
 /**
  * Modern Mock Location Engine for LibreGo.
  * Decoupled from UI and floating windows.
- * Supports:
- * - Simultaneous GPS, Network, and Fused mock providers
- * - Monotonic timestamp & elapsed realtime nanoseconds
- * - Dynamic physical accuracy & satellite extras
- * - Pure Kotlin Coroutines loop
+ * Includes Anti-Mock Detection features:
+ * - Micro-drift physical signal noise (0.3m ~ 1.2m) preventing dead-still detection
+ * - Monotonic timestamp & elapsed realtime nanoseconds preventing time warp detection
+ * - Realistic GNSS extras: satellites (10~15), maxSatellites, and mean C/N0 (carrier-to-noise density)
+ * - Coarse network provider jitter & delayed timestamps
+ * - Multi-provider (GPS, Network, Fused) simultaneous spoofing
  */
 object MockLocationEngine {
 
@@ -105,7 +106,6 @@ object MockLocationEngine {
             longitude = lng,
             altitude = alt
         )
-        // Immediately push one update
         updateMonotonicTimes()
         injectAllProviders(_locationState.value)
     }
@@ -241,24 +241,31 @@ object MockLocationEngine {
 
     private fun injectGps(mgr: LocationManager, state: LocationState) {
         try {
+            // Natural micro-jitter (~0.5m drift) simulating ionospheric signal noise
+            val jitterLat = (random.nextDouble() - 0.5) * 0.000005
+            val jitterLng = (random.nextDouble() - 0.5) * 0.000005
+            val jitterAlt = (random.nextDouble() - 0.5) * 0.3
+
             val loc = Location(LocationManager.GPS_PROVIDER).apply {
-                accuracy = 2.0f + random.nextFloat() * 1.5f + (state.speed.toFloat() * 0.05f)
-                altitude = state.altitude
+                accuracy = 2.2f + (random.nextFloat() * 1.8f) + (state.speed.toFloat() * 0.05f)
+                altitude = state.altitude + jitterAlt
                 bearing = state.bearing
-                latitude = state.latitude
-                longitude = state.longitude
+                latitude = state.latitude + jitterLat
+                longitude = state.longitude + jitterLng
                 time = lastTime
                 speed = state.speed.toFloat()
                 elapsedRealtimeNanos = lastElapsedNanos
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    verticalAccuracyMeters = 1.2f + random.nextFloat() * 0.5f
-                    bearingAccuracyDegrees = 5.0f
-                    speedAccuracyMetersPerSecond = 0.5f
+                    verticalAccuracyMeters = 1.0f + (random.nextFloat() * 0.5f)
+                    bearingAccuracyDegrees = 3.0f + (random.nextFloat() * 2.0f)
+                    speedAccuracyMetersPerSecond = 0.2f + (random.nextFloat() * 0.2f)
                 }
 
                 extras = Bundle().apply {
-                    putInt("satellites", 8 + random.nextInt(6))
+                    putInt("satellites", 10 + random.nextInt(5))
+                    putInt("maxSatellites", 24)
+                    putFloat("meanCn0", 32.0f + random.nextFloat() * 4.0f)
                 }
             }
             mgr.setTestProviderLocation(LocationManager.GPS_PROVIDER, loc)
@@ -269,16 +276,20 @@ object MockLocationEngine {
 
     private fun injectNetwork(mgr: LocationManager, state: LocationState) {
         try {
+            // Realistic network location with slight lag & coarser radius
+            val netJitterLat = (random.nextDouble() - 0.5) * 0.00002
+            val netJitterLng = (random.nextDouble() - 0.5) * 0.00002
+            val netLagNanos = (random.nextInt(15) * 1_000_000L) // 0-15ms network latency
+
             val loc = Location(LocationManager.NETWORK_PROVIDER).apply {
-                @Suppress("DEPRECATION")
-                accuracy = Criteria.ACCURACY_COARSE.toFloat()
+                accuracy = 20.0f + random.nextFloat() * 12.0f
                 altitude = state.altitude
                 bearing = state.bearing
-                latitude = state.latitude
-                longitude = state.longitude
-                time = lastTime
+                latitude = state.latitude + netJitterLat
+                longitude = state.longitude + netJitterLng
+                time = lastTime - (netLagNanos / 1_000_000L)
                 speed = state.speed.toFloat()
-                elapsedRealtimeNanos = lastElapsedNanos
+                elapsedRealtimeNanos = (lastElapsedNanos - netLagNanos).coerceAtLeast(0L)
             }
             mgr.setTestProviderLocation(LocationManager.NETWORK_PROVIDER, loc)
         } catch (e: Exception) {
@@ -288,24 +299,29 @@ object MockLocationEngine {
 
     private fun injectFused(mgr: LocationManager, state: LocationState) {
         try {
+            val fusedJitterLat = (random.nextDouble() - 0.5) * 0.000004
+            val fusedJitterLng = (random.nextDouble() - 0.5) * 0.000004
+
             val loc = Location(FUSED_PROVIDER).apply {
-                accuracy = 2.5f + random.nextFloat() * 1.5f + (state.speed.toFloat() * 0.05f)
+                accuracy = 2.8f + (random.nextFloat() * 1.5f) + (state.speed.toFloat() * 0.04f)
                 altitude = state.altitude
                 bearing = state.bearing
-                latitude = state.latitude
-                longitude = state.longitude
+                latitude = state.latitude + fusedJitterLat
+                longitude = state.longitude + fusedJitterLng
                 time = lastTime
                 speed = state.speed.toFloat()
                 elapsedRealtimeNanos = lastElapsedNanos
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    verticalAccuracyMeters = 1.5f
-                    bearingAccuracyDegrees = 5.0f
-                    speedAccuracyMetersPerSecond = 0.5f
+                    verticalAccuracyMeters = 1.2f + (random.nextFloat() * 0.4f)
+                    bearingAccuracyDegrees = 3.5f + (random.nextFloat() * 2.0f)
+                    speedAccuracyMetersPerSecond = 0.25f + (random.nextFloat() * 0.2f)
                 }
 
                 extras = Bundle().apply {
-                    putInt("satellites", 8 + random.nextInt(6))
+                    putInt("satellites", 11 + random.nextInt(4))
+                    putInt("maxSatellites", 24)
+                    putFloat("meanCn0", 33.0f + random.nextFloat() * 3.5f)
                 }
             }
             mgr.setTestProviderLocation(FUSED_PROVIDER, loc)
