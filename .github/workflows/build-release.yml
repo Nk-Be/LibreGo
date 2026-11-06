@@ -37,7 +37,7 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
 
       - name: Make Changelog
-        uses: ardalanamini/auto-changelog@v4.0.4
+        uses: ardalanamini/auto-changelog@v5.0.0
         id: changelog
         with:
           github-token: ${{ github.token }}
