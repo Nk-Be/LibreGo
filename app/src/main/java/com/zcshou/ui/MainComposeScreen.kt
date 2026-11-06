@@ -48,32 +48,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.baidu.mapapi.map.BaiduMap
-import com.baidu.mapapi.map.BitmapDescriptor
-import com.baidu.mapapi.map.BitmapDescriptorFactory
-import com.baidu.mapapi.map.MapPoi
-import com.baidu.mapapi.map.MapStatusUpdateFactory
-import com.baidu.mapapi.map.MapView
-import com.baidu.mapapi.map.Marker
-import com.baidu.mapapi.map.MarkerOptions
-import com.baidu.mapapi.model.LatLng
-import com.baidu.mapapi.search.core.SearchResult
-import com.baidu.mapapi.search.geocode.GeoCodeResult
-import com.baidu.mapapi.search.geocode.GeoCoder
-import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener
-import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption
-import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult
-import com.baidu.mapapi.search.sug.OnGetSuggestionResultListener
-import com.baidu.mapapi.search.sug.SuggestionResult
-import com.baidu.mapapi.search.sug.SuggestionSearch
-import com.baidu.mapapi.search.sug.SuggestionSearchOption
+import com.zcshou.gogogo.MainActivity
 import com.zcshou.gogogo.R
 import com.zcshou.service.MockLocationEngine
 import com.zcshou.shizuku.ShizukuManager
@@ -81,9 +65,16 @@ import com.zcshou.ui.components.JoystickCard
 import com.zcshou.ui.components.ShizukuPrivilegeCard
 import com.zcshou.ui.components.StatusCard
 import com.zcshou.ui.components.TopSearchBar
+import com.zcshou.ui.map.OsmSearchHelper
+import com.zcshou.ui.map.OsmTileSources
 import com.zcshou.utils.GoUtils
 import com.zcshou.utils.MapUtils
 import kotlinx.coroutines.launch
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Marker
 
 @Composable
 fun MainComposeScreen(
@@ -101,64 +92,132 @@ fun MainComposeScreen(
     val locationState by MockLocationEngine.locationState.collectAsStateWithLifecycle()
     val shizukuState by ShizukuManager.state.collectAsStateWithLifecycle()
 
-    var targetLatLng by remember { mutableStateOf<LatLng?>(null) }
-    var targetName by remember { mutableStateOf<String?>(null) }
+    var targetPoint by remember { mutableStateOf<GeoPoint?>(GeoPoint(39.908722, 116.397496)) }
+    var targetName by remember { mutableStateOf<String?>("北京市 (點擊地圖選擇位置)") }
     var currentSpeedPreset by remember { mutableIntStateOf(1) } // 0: walk, 1: run, 2: bike
 
     var showCoordDialog by remember { mutableStateOf(false) }
     var showPrivilegeDialog by remember { mutableStateOf(false) }
     var showSearchDialog by remember { mutableStateOf(false) }
-    var showApiKeyDialog by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    var isSatelliteMap by remember { mutableStateOf(false) }
+    var showTileDialog by remember { mutableStateOf(false) }
 
-    val pinIcon = remember { BitmapDescriptorFactory.fromResource(R.drawable.icon_gcoding) }
-    var currentMarker by remember { mutableStateOf<Marker?>(null) }
+    // Tile source index: 0: AMap Vector (default), 1: AMap Satellite, 2: OSM Standard
+    var currentTileSourceIndex by remember { mutableIntStateOf(0) }
 
-    // Geocoder
-    val geoCoder = remember {
-        GeoCoder.newInstance().apply {
-            setOnGetGeoCodeResultListener(object : OnGetGeoCoderResultListener {
-                override fun onGetGeoCodeResult(result: GeoCodeResult?) {}
-                override fun onGetReverseGeoCodeResult(result: ReverseGeoCodeResult?) {
-                    if (result != null && result.error == SearchResult.ERRORNO.NO_ERROR) {
-                        targetName = result.address
-                    }
-                }
-            })
+    val pinDrawable = remember { ContextCompat.getDrawable(context, R.drawable.icon_gcoding) }
+    var targetMarker by remember { mutableStateOf<Marker?>(null) }
+    var mockMarker by remember { mutableStateOf<Marker?>(null) }
+
+    // Check for pending location from HistoryActivity
+    LaunchedEffect(MainActivity.pendingLocationLng, MainActivity.pendingLocationLat) {
+        val pLng = MainActivity.pendingLocationLng
+        val pLat = MainActivity.pendingLocationLat
+        if (pLng != null && pLat != null) {
+            val pt = GeoPoint(pLat, pLng)
+            targetPoint = pt
+            targetName = MainActivity.pendingLocationName ?: "歷史記錄位置"
+            mapView.controller.animateTo(pt)
+
+            targetMarker?.let { mapView.overlays.remove(it) }
+            val m = Marker(mapView).apply {
+                position = pt
+                icon = pinDrawable
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                title = targetName
+            }
+            mapView.overlays.add(m)
+            targetMarker = m
+            mapView.invalidate()
+
+            MainActivity.pendingLocationLng = null
+            MainActivity.pendingLocationLat = null
+            MainActivity.pendingLocationName = null
         }
     }
 
-    DisposableEffect(Unit) {
-        val map = mapView.map
-        map.setOnMapClickListener(object : BaiduMap.OnMapClickListener {
-            override fun onMapClick(point: LatLng?) {
-                point?.let {
-                    targetLatLng = it
-                    targetName = null
-                    map.clear()
-                    currentMarker = map.addOverlay(MarkerOptions().position(it).icon(pinIcon)) as? Marker
-                    geoCoder.reverseGeoCode(ReverseGeoCodeOption().location(it))
+    // Configure osmdroid MapView overlays and events
+    DisposableEffect(mapView) {
+        mapView.setMultiTouchControls(true)
+        mapView.isTilesScaledToDpi = true
+        mapView.setTileSource(OsmTileSources.AMAP_VECTOR)
+        mapView.controller.setZoom(16.0)
+        targetPoint?.let { mapView.controller.setCenter(it) }
+
+        // Setup default pin
+        targetPoint?.let { pt ->
+            val m = Marker(mapView).apply {
+                position = pt
+                icon = pinDrawable
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                title = targetName
+            }
+            mapView.overlays.add(m)
+            targetMarker = m
+        }
+
+        // Tap listener overlay
+        val eventsOverlay = MapEventsOverlay(object : MapEventsReceiver {
+            override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                targetPoint = p
+                targetName = "載入地址中..."
+
+                targetMarker?.let { mapView.overlays.remove(it) }
+                val m = Marker(mapView).apply {
+                    position = p
+                    icon = pinDrawable
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 }
+                mapView.overlays.add(m)
+                targetMarker = m
+                mapView.invalidate()
+
+                scope.launch {
+                    targetName = OsmSearchHelper.reverseGeocode(p.latitude, p.longitude)
+                    m.title = targetName
+                }
+                return true
             }
 
-            override fun onMapPoiClick(poi: MapPoi?) {
-                poi?.position?.let {
-                    targetLatLng = it
-                    targetName = poi.name
-                    map.clear()
-                    currentMarker = map.addOverlay(MarkerOptions().position(it).icon(pinIcon)) as? Marker
-                }
+            override fun longPressHelper(p: GeoPoint): Boolean {
+                return singleTapConfirmedHelper(p)
             }
         })
+        mapView.overlays.add(0, eventsOverlay)
+        mapView.invalidate()
 
         onDispose {
-            geoCoder.destroy()
+            mapView.overlays.clear()
+        }
+    }
+
+    // Update real-time mock location marker
+    LaunchedEffect(locationState) {
+        if (locationState.isMocking) {
+            val pt = GeoPoint(locationState.latitude, locationState.longitude)
+            if (mockMarker == null) {
+                val m = Marker(mapView).apply {
+                    position = pt
+                    icon = pinDrawable
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    title = "即時模擬點"
+                }
+                mapView.overlays.add(m)
+                mockMarker = m
+            } else {
+                mockMarker?.position = pt
+            }
+            mapView.invalidate()
+        } else {
+            mockMarker?.let {
+                mapView.overlays.remove(it)
+                mockMarker = null
+                mapView.invalidate()
+            }
         }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // 1. Edge-to-Edge Map View
+        // 1. Edge-to-Edge OpenStreetMap View
         AndroidView(
             factory = { mapView },
             modifier = Modifier.fillMaxSize()
@@ -167,10 +226,10 @@ fun MainComposeScreen(
         // 2. Floating Top Search Capsule
         val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         TopSearchBar(
-            queryText = targetName ?: if (targetLatLng != null) "${targetLatLng?.latitude}, ${targetLatLng?.longitude}" else "",
+            queryText = targetName ?: if (targetPoint != null) "${targetPoint?.latitude}, ${targetPoint?.longitude}" else "",
             onSearchClick = { showSearchDialog = true },
             onHistoryClick = onOpenHistory,
-            onApiKeyClick = { showApiKeyDialog = true },
+            onApiKeyClick = { showTileDialog = true },
             onSettingsClick = onOpenSettings,
             modifier = Modifier
                 .padding(top = statusBarPadding + 8.dp, start = 16.dp, end = 16.dp)
@@ -186,11 +245,10 @@ fun MainComposeScreen(
         ) {
             FilledTonalIconButton(
                 onClick = {
-                    val map = mapView.map
-                    targetLatLng?.let {
-                        map.animateMapStatus(MapStatusUpdateFactory.newLatLng(it))
+                    targetPoint?.let {
+                        mapView.controller.animateTo(it)
                     } ?: run {
-                        map.animateMapStatus(MapStatusUpdateFactory.zoomIn())
+                        mapView.controller.zoomIn()
                     }
                 },
                 modifier = Modifier.size(46.dp),
@@ -203,10 +261,7 @@ fun MainComposeScreen(
             }
 
             FilledTonalIconButton(
-                onClick = {
-                    isSatelliteMap = !isSatelliteMap
-                    mapView.map.mapType = if (isSatelliteMap) BaiduMap.MAP_TYPE_SATELLITE else BaiduMap.MAP_TYPE_NORMAL
-                },
+                onClick = { showTileDialog = true },
                 modifier = Modifier.size(46.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = IconButtonDefaults.filledTonalIconButtonColors(
@@ -240,10 +295,10 @@ fun MainComposeScreen(
             StatusCard(
                 locationState = locationState,
                 targetName = targetName,
-                targetLat = targetLatLng?.latitude,
-                targetLng = targetLatLng?.longitude,
+                targetLat = targetPoint?.latitude,
+                targetLng = targetPoint?.longitude,
                 onToggleMock = {
-                    onToggleMock(targetLatLng?.longitude, targetLatLng?.latitude)
+                    onToggleMock(targetPoint?.longitude, targetPoint?.latitude)
                 }
             )
 
@@ -276,19 +331,45 @@ fun MainComposeScreen(
         CustomCoordDialog(
             onDismiss = { showCoordDialog = false },
             onConfirm = { lng, lat, isBD09 ->
-                val finalLatLng = if (isBD09) {
-                    LatLng(lat, lng)
+                val finalPt = if (isBD09) {
+                    val wgs = MapUtils.bd2wgs(lng, lat)
+                    GeoPoint(wgs[1], wgs[0])
                 } else {
-                    val bd = MapUtils.wgs2bd09(lng, lat)
-                    LatLng(bd[1], bd[0])
+                    GeoPoint(lat, lng)
                 }
-                targetLatLng = finalLatLng
-                targetName = "自定義坐標 (${String.format("%.4f", lng)}, ${String.format("%.4f", lat)})"
-                val map = mapView.map
-                map.clear()
-                currentMarker = map.addOverlay(MarkerOptions().position(finalLatLng).icon(pinIcon)) as? Marker
-                map.setMapStatus(MapStatusUpdateFactory.newLatLng(finalLatLng))
+                targetPoint = finalPt
+                targetName = "自定義坐標 (${String.format("%.4f", finalPt.longitude)}, ${String.format("%.4f", finalPt.latitude)})"
+
+                targetMarker?.let { mapView.overlays.remove(it) }
+                val m = Marker(mapView).apply {
+                    position = finalPt
+                    icon = pinDrawable
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    title = targetName
+                }
+                mapView.overlays.add(m)
+                targetMarker = m
+                mapView.controller.animateTo(finalPt)
+                mapView.invalidate()
                 showCoordDialog = false
+            }
+        )
+    }
+
+    // Dialog: Tile Source Switcher (OpenStreetMap & Public AutoNavi)
+    if (showTileDialog) {
+        TileSourceDialog(
+            selectedIndex = currentTileSourceIndex,
+            onDismiss = { showTileDialog = false },
+            onSelect = { idx ->
+                currentTileSourceIndex = idx
+                when (idx) {
+                    0 -> mapView.setTileSource(OsmTileSources.AMAP_VECTOR)
+                    1 -> mapView.setTileSource(OsmTileSources.AMAP_SATELLITE)
+                    2 -> mapView.setTileSource(OsmTileSources.OSM_MAPNIK)
+                }
+                mapView.invalidate()
+                showTileDialog = false
             }
         )
     }
@@ -318,27 +399,28 @@ fun MainComposeScreen(
         )
     }
 
-    // Dialog: Search Location
+    // Dialog: Search Location (OpenStreetMap / Photon)
     if (showSearchDialog) {
         SearchLocationDialog(
             onDismiss = { showSearchDialog = false },
             onSelectLocation = { name, lat, lng ->
-                val pt = LatLng(lat, lng)
-                targetLatLng = pt
+                val pt = GeoPoint(lat, lng)
+                targetPoint = pt
                 targetName = name
-                val map = mapView.map
-                map.clear()
-                currentMarker = map.addOverlay(MarkerOptions().position(pt).icon(pinIcon)) as? Marker
-                map.setMapStatus(MapStatusUpdateFactory.newLatLng(pt))
+
+                targetMarker?.let { mapView.overlays.remove(it) }
+                val m = Marker(mapView).apply {
+                    position = pt
+                    icon = pinDrawable
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    title = name
+                }
+                mapView.overlays.add(m)
+                targetMarker = m
+                mapView.controller.animateTo(pt)
+                mapView.invalidate()
                 showSearchDialog = false
             }
-        )
-    }
-
-    // Dialog: Custom API Key
-    if (showApiKeyDialog) {
-        CustomApiKeyDialog(
-            onDismiss = { showApiKeyDialog = false }
         )
     }
 }
@@ -350,7 +432,7 @@ private fun CustomCoordDialog(
 ) {
     var lngText by remember { mutableStateOf("") }
     var latText by remember { mutableStateOf("") }
-    var isBD09 by remember { mutableStateOf(true) }
+    var isWGS84 by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -374,11 +456,11 @@ private fun CustomCoordDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = isBD09, onClick = { isBD09 = true })
-                    Text("百度坐標 (BD09)", style = MaterialTheme.typography.bodyMedium)
+                    RadioButton(selected = isWGS84, onClick = { isWGS84 = true })
+                    Text("真實標準 / OSM (WGS84)", style = MaterialTheme.typography.bodyMedium)
                     Spacer(modifier = Modifier.width(12.dp))
-                    RadioButton(selected = !isBD09, onClick = { isBD09 = false })
-                    Text("真實/高德 (WGS84)", style = MaterialTheme.typography.bodyMedium)
+                    RadioButton(selected = !isWGS84, onClick = { isWGS84 = false })
+                    Text("百度坐標 (BD09)", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -388,7 +470,7 @@ private fun CustomCoordDialog(
                     val lng = lngText.toDoubleOrNull()
                     val lat = latText.toDoubleOrNull()
                     if (lng != null && lat != null) {
-                        onConfirm(lng, lat, isBD09)
+                        onConfirm(lng, lat, !isWGS84)
                     }
                 }
             ) {
@@ -398,6 +480,62 @@ private fun CustomCoordDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun TileSourceDialog(
+    selectedIndex: Int,
+    onDismiss: () -> Unit,
+    onSelect: (Int) -> Unit
+) {
+    val options = listOf(
+        Pair("高德公開路網 (推薦)", "免 Key、中文路網精確、國內 CDN 加速"),
+        Pair("高德公開衛星空拍", "高畫質衛星航拍照、無偏移覆蓋"),
+        Pair("OpenStreetMap 標準圖源", "全球開源社群維護標準地圖")
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("🗺️ 公開地圖圖層切換", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "當前採用 100% 公開地圖架構，無須任何 API Key，永遠無套件名限制！",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                options.forEachIndexed { index, (title, desc) ->
+                    Card(
+                        onClick = { onSelect(index) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selectedIndex == index) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selectedIndex == index, onClick = { onSelect(index) })
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("關閉")
             }
         }
     )
@@ -481,45 +619,28 @@ private fun SearchLocationDialog(
     onDismiss: () -> Unit,
     onSelectLocation: (name: String, lat: Double, lng: Double) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    val results = remember { mutableStateListOf<Pair<String, LatLng>>() }
+    val results = remember { mutableStateListOf<OsmSearchHelper.PlaceResult>() }
     var isSearching by remember { mutableStateOf(false) }
-
-    val suggestionSearch = remember {
-        SuggestionSearch.newInstance().apply {
-            setOnGetSuggestionResultListener(OnGetSuggestionResultListener { res ->
-                isSearching = false
-                results.clear()
-                res?.allSuggestions?.forEach { s ->
-                    val pt = s.pt
-                    if (pt != null && !s.key.isNullOrBlank()) {
-                        results.add(Pair("${s.key} (${s.city ?: ""}${s.district ?: ""})", pt))
-                    }
-                }
-            })
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            suggestionSearch.destroy()
-        }
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("搜尋目標地點", fontWeight = FontWeight.Bold) },
+        title = { Text("搜尋目標地點 (公開檢索)", fontWeight = FontWeight.Bold) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = {
                         query = it
-                        if (it.isNotBlank()) {
+                        if (it.length >= 2) {
                             isSearching = true
-                            suggestionSearch.requestSuggestion(
-                                SuggestionSearchOption().city("全国").keyword(it)
-                            )
+                            scope.launch {
+                                val list = OsmSearchHelper.searchPlaces(it)
+                                results.clear()
+                                results.addAll(list)
+                                isSearching = false
+                            }
                         } else {
                             results.clear()
                         }
@@ -539,16 +660,22 @@ private fun SearchLocationDialog(
                     LazyColumn(modifier = Modifier.fillMaxWidth().height(220.dp)) {
                         items(results) { item ->
                             Card(
-                                onClick = { onSelectLocation(item.first, item.second.latitude, item.second.longitude) },
+                                onClick = { onSelectLocation(item.title, item.latitude, item.longitude) },
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             ) {
-                                Text(
-                                    text = item.first,
-                                    modifier = Modifier.padding(12.dp),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = item.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -559,111 +686,6 @@ private fun SearchLocationDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("關閉")
-            }
-        }
-    )
-}
-
-@Composable
-private fun CustomApiKeyDialog(
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val prefs = remember { androidx.preference.PreferenceManager.getDefaultSharedPreferences(context) }
-    var keyText by remember { mutableStateOf(prefs.getString("custom_maps_api_key", "") ?: "") }
-    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-
-    val packageName = "top.nkbe.libre"
-    val sha1 = "C7:39:86:A1:EA:2E:AD:D4:B3:CF:63:CA:A4:2B:C6:AC:2B:59:E2:B7"
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("🔑 自訂地圖 API Key", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "百度地圖官方嚴格要求 API Key 必須綁定白名單【應用包名 + 簽名 SHA1】。若地圖白屏或搜尋無反應，請填入您自己的百度地圖 AK。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text("應用包名", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text(packageName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                            }
-                            TextButton(onClick = {
-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(packageName))
-                                GoUtils.DisplayToast(context, "已複製包名")
-                            }) {
-                                Text("複製", fontSize = 11.sp)
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("簽名 SHA1", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text(sha1, style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), maxLines = 1)
-                            }
-                            TextButton(onClick = {
-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(sha1))
-                                GoUtils.DisplayToast(context, "已複製 SHA1")
-                            }) {
-                                Text("複製", fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = keyText,
-                    onValueChange = { keyText = it },
-                    label = { Text("百度地圖 API Key (AK)") },
-                    placeholder = { Text("貼上您的專屬 API Key") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val finalKey = keyText.trim()
-                    prefs.edit().putString("custom_maps_api_key", finalKey).apply()
-                    if (finalKey.isNotEmpty()) {
-                        com.baidu.mapapi.SDKInitializer.setApiKey(finalKey)
-                        GoUtils.DisplayToast(context, "自訂 API Key 已保存並生效！")
-                    } else {
-                        prefs.edit().remove("custom_maps_api_key").apply()
-                        com.baidu.mapapi.SDKInitializer.setApiKey(com.zcshou.gogogo.BuildConfig.MAPS_API_KEY)
-                        GoUtils.DisplayToast(context, "已恢復預設 API Key")
-                    }
-                    onDismiss()
-                }
-            ) {
-                Text("保存並生效")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
             }
         }
     )

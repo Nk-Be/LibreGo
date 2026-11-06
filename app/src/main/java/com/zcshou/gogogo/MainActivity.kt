@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
-import com.baidu.mapapi.map.MapView
 import com.elvishew.xlog.XLog
 import com.zcshou.database.DataBaseHistoryLocation
 import com.zcshou.joystick.FloatingJoystickManager
@@ -30,9 +29,11 @@ import com.zcshou.utils.GoUtils
 import com.zcshou.utils.MapUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.osmdroid.views.MapView
 
 /**
  * Modern Jetpack Compose + Material 3 (Shizuku-inspired) MainActivity for LibreGo.
+ * Powered by OpenStreetMap (osmdroid) - 100% free, no API key, no package name restrictions.
  */
 class MainActivity : ComponentActivity() {
 
@@ -53,9 +54,11 @@ class MainActivity : ComponentActivity() {
             return try {
                 val lng = bd09Longitude.toDoubleOrNull() ?: return false
                 val lat = bd09Latitude.toDoubleOrNull() ?: return false
+                // Convert BD09 to standard WGS84 for OSM
+                val wgs = MapUtils.bd2wgs(lng, lat)
                 pendingLocationName = name
-                pendingLocationLng = lng
-                pendingLocationLat = lat
+                pendingLocationLng = wgs[0]
+                pendingLocationLat = wgs[1]
                 true
             } catch (_: Exception) {
                 false
@@ -107,7 +110,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        XLog.i("MainActivity Compose initialized")
+        XLog.i("MainActivity Compose initialized with osmdroid")
     }
 
     override fun onResume() {
@@ -127,7 +130,7 @@ class MainActivity : ComponentActivity() {
                 unbindService(serviceConnection)
             } catch (_: Exception) {}
         }
-        mapView.onDestroy()
+        mapView.onDetach()
         super.onDestroy()
     }
 
@@ -160,13 +163,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startMocking(bdLng: Double, bdLat: Double) {
-        val wgs = MapUtils.bd2wgs(bdLng, bdLat)
+    private fun startMocking(lng: Double, lat: Double) {
         val alt = sharedPreferences.getString("setting_altitude", "55.0")?.toDoubleOrNull() ?: 55.0
 
         val intent = Intent(this, ServiceGo::class.java).apply {
-            putExtra(LNG_MSG_ID, wgs[0])
-            putExtra(LAT_MSG_ID, wgs[1])
+            putExtra(LNG_MSG_ID, lng)
+            putExtra(LAT_MSG_ID, lat)
             putExtra(ALT_MSG_ID, alt)
         }
 
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
         isMockServiceRunning = true
 
         // Record history
-        recordHistory(bdLng, bdLat)
+        recordHistory(lng, lat)
     }
 
     private fun stopMocking() {

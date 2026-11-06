@@ -1,9 +1,7 @@
 package com.zcshou.gogogo
 
 import android.app.Application
-import com.baidu.location.LocationClient
-import com.baidu.mapapi.CoordType
-import com.baidu.mapapi.SDKInitializer
+import androidx.preference.PreferenceManager
 import com.elvishew.xlog.LogConfiguration
 import com.elvishew.xlog.LogLevel
 import com.elvishew.xlog.XLog
@@ -12,10 +10,12 @@ import com.elvishew.xlog.printer.file.FilePrinter
 import com.elvishew.xlog.printer.file.backup.NeverBackupStrategy
 import com.elvishew.xlog.printer.file.clean.FileLastModifiedCleanStrategy
 import com.elvishew.xlog.printer.file.naming.ChangelessFileNameGenerator
+import org.osmdroid.config.Configuration
 import java.io.File
 
 /**
  * Application Entry point for LibreGo in Kotlin.
+ * Fully open-source, using OpenStreetMap (osmdroid) without API key restrictions.
  */
 class GoApplication : Application() {
 
@@ -32,17 +32,14 @@ class GoApplication : Application() {
             initXlog()
         } catch (_: Exception) {}
 
+        // Initialize OpenStreetMap (osmdroid) configuration
         try {
-            SDKInitializer.setAgreePrivacy(this, true)
-            LocationClient.setAgreePrivacy(true)
-            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
-            val customApiKey = prefs.getString("custom_maps_api_key", null)?.trim()
-            val effectiveKey = if (!customApiKey.isNullOrEmpty()) customApiKey else BuildConfig.MAPS_API_KEY
-            SDKInitializer.setApiKey(effectiveKey)
-            SDKInitializer.initialize(this)
-            SDKInitializer.setCoordType(CoordType.BD09LL)
+            val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+            Configuration.getInstance().load(this, prefs)
+            Configuration.getInstance().userAgentValue = packageName
+            XLog.i("GoApplication: osmdroid initialized with package: $packageName")
         } catch (e: Throwable) {
-            XLog.e("GoApplication: Baidu SDKInitializer error", e)
+            XLog.e("GoApplication: osmdroid configuration error", e)
         }
 
         try {
@@ -63,14 +60,13 @@ class GoApplication : Application() {
                 .enableBorder()
                 .build()
 
-            val consolePrinter = ConsolePrinter()
-            val filePrinter = FilePrinter.Builder(logPath.path)
+            val printer = FilePrinter.Builder(File(logPath, LOG_FILE_NAME).path)
                 .fileNameGenerator(ChangelessFileNameGenerator(LOG_FILE_NAME))
                 .backupStrategy(NeverBackupStrategy())
                 .cleanStrategy(FileLastModifiedCleanStrategy(MAX_TIME))
                 .build()
 
-            XLog.init(config, consolePrinter, filePrinter)
+            XLog.init(config, ConsolePrinter(), printer)
         }
     }
 }
